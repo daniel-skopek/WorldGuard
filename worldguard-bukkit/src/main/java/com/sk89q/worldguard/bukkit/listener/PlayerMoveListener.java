@@ -36,16 +36,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.EntityMountEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.util.Vector;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import java.util.function.Consumer;
 
 public class PlayerMoveListener extends AbstractListener {
+
+    private final Map<UUID, Location> lastPositions = new ConcurrentHashMap<>();
 
     public PlayerMoveListener(WorldGuardPlugin plugin) {
         super(plugin);
@@ -56,7 +62,107 @@ public class PlayerMoveListener extends AbstractListener {
         if (WorldGuard.getInstance().getPlatform().getGlobalStateManager().usePlayerMove) {
             PluginManager pm = getPlugin().getServer().getPluginManager();
             pm.registerEvents(this, getPlugin());
+
+            startMoveCheckScheduler();
         }
+    }
+
+    private void startMoveCheckScheduler() {
+        long CHECK_INTERVAL_TICKS = 5L;
+
+        Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                checkPlayerMovement(player);
+            }
+        }, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+    }
+
+    private boolean isSameBlock(Location loc1, Location loc2) {
+        return loc1.getBlockX() == loc2.getBlockX()
+                && loc1.getBlockY() == loc2.getBlockY()
+                && loc1.getBlockZ() == loc2.getBlockZ()
+                && loc1.getWorld().getUID().equals(loc2.getWorld().getUID());
+    }
+
+    private void checkPlayerMovement(Player player) {
+        if (!player.isOnline() || player.isDead()) {
+            return;
+        }
+
+        Location currentLoc = player.getLocation();
+        UUID playerUUID = player.getUniqueId();
+
+        Location lastLoc = lastPositions.get(playerUUID);
+
+        if (lastLoc != null && isSameBlock(lastLoc, currentLoc)) {
+            return;
+        }
+
+        lastPositions.put(playerUUID, currentLoc.clone());
+
+        if (lastLoc == null) {
+            return;
+        }
+
+        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+        Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer);
+
+        MoveType moveType = determineMoveType(player);
+        com.sk89q.worldedit.util.Location weLocation = session.testMoveTo(
+                localPlayer,
+                BukkitAdapter.adapt(currentLoc),
+                moveType
+        );
+
+        if (weLocation != null) {
+            handleDeniedMovement(player, weLocation, currentLoc);
+        }
+    }
+
+    private MoveType determineMoveType(Player player) {
+        if (player.isGliding()) {
+            return MoveType.GLIDE;
+        } else if (player.isSwimming()) {
+            return MoveType.SWIM;
+        } else if (player.getVehicle() != null && player.getVehicle() instanceof AbstractHorse) {
+            return MoveType.RIDE;
+        }
+
+        return MoveType.MOVE;
+    }
+
+    private void handleDeniedMovement(Player player, com.sk89q.worldedit.util.Location weLocation, Location originalTo) {
+        final Location override = BukkitAdapter.adapt(weLocation);
+        override.setX(override.getBlockX() + 0.5);
+        override.setY(override.getBlockY());
+        override.setZ(override.getBlockZ() + 0.5);
+        override.setPitch(originalTo.getPitch());
+        override.setYaw(originalTo.getYaw());
+
+        Entity vehicle = player.getVehicle();
+        if (vehicle != null) {
+            vehicle.eject();
+
+            Entity current = vehicle;
+            while (current != null) {
+                current.eject();
+                vehicle.setVelocity(new Vector());
+                if (vehicle instanceof LivingEntity) {
+                    vehicle.teleport(override.clone());
+                } else {
+                    vehicle.teleport(override.clone().add(0, 1, 0));
+                }
+                current = current.getVehicle();
+            }
+
+            player.teleport(override.clone().add(0, 1, 0));
+            Bukkit.getScheduler().runTaskLater(getPlugin(), () ->
+                    player.teleport(override.clone().add(0, 1, 0)), 1);
+        } else {
+            player.teleport(override);
+        }
+
+        lastPositions.put(player.getUniqueId(), override.clone());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -65,6 +171,8 @@ public class PlayerMoveListener extends AbstractListener {
 
         Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(player);
         session.testMoveTo(player, BukkitAdapter.adapt(event.getRespawnLocation()), MoveType.RESPAWN, true);
+
+        lastPositions.put(event.getPlayer().getUniqueId(), event.getRespawnLocation().clone());
     }
 
     @EventHandler
@@ -79,77 +187,9 @@ public class PlayerMoveListener extends AbstractListener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    public void onPlayerMove(PlayerMoveEvent event) {
-        Location from = event.getFrom();
-        Location to = event.getTo();
-        if (from.getBlockX() == to.getBlockX()
-                && from.getBlockY() == to.getBlockY()
-                && from.getBlockZ() == to.getBlockZ()) {
-            return;
-        }
-
-        final Player player = event.getPlayer();
-        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
-
-        Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer);
-        MoveType moveType = MoveType.MOVE;
-        if (event.getPlayer().isGliding()) {
-            moveType = MoveType.GLIDE;
-        } else if (event.getPlayer().isSwimming()) {
-            moveType = MoveType.SWIM;
-        } else if (event.getPlayer().getVehicle() != null && event.getPlayer().getVehicle() instanceof AbstractHorse) {
-            moveType = MoveType.RIDE;
-        }
-        com.sk89q.worldedit.util.Location weLocation = session.testMoveTo(localPlayer, BukkitAdapter.adapt(to), moveType);
-
-        if (weLocation != null) {
-            final Location override = BukkitAdapter.adapt(weLocation);
-            override.setX(override.getBlockX() + 0.5);
-            override.setY(override.getBlockY());
-            override.setZ(override.getBlockZ() + 0.5);
-            override.setPitch(to.getPitch());
-            override.setYaw(to.getYaw());
-
-            event.setTo(override.clone());
-
-            Entity vehicle = player.getVehicle();
-            if (vehicle != null) {
-                vehicle.eject();
-
-                Entity current = vehicle;
-                while (current != null) {
-                    current.eject();
-                    vehicle.setVelocity(new Vector());
-                    if (vehicle instanceof LivingEntity) {
-                        Location vehicleTeleportLocation = override.clone();
-                        teleport(vehicle, vehicleTeleportLocation);
-                    } else {
-                        Location dismountLocation = override.clone().add(0, 1, 0);
-                        teleport(vehicle, dismountLocation);
-                    }
-                    current = current.getVehicle();
-                }
-
-                Location playerDismountLocation = override.clone().add(0, 1, 0);
-                teleport(player, playerDismountLocation);
-
-
-                Location delayedDismountLocation = override.clone().add(0, 1, 0);
-                Runnable task = () -> teleport(player, delayedDismountLocation);
-                if (getPlugin().isFolia()) {
-                    player.getScheduler().runDelayed(getPlugin(), new Consumer() {
-                        @Override
-                        public void accept(Object ignored) {
-                            task.run();
-                        }
-                    }, null, 1);
-                } else {
-                    Bukkit.getScheduler().runTaskLater(getPlugin(), task, 1);
-                }
-            }
-        }
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        lastPositions.put(event.getPlayer().getUniqueId(), event.getPlayer().getLocation().clone());
     }
 
     @EventHandler
@@ -169,6 +209,8 @@ public class PlayerMoveListener extends AbstractListener {
         }
 
         session.uninitialize(localPlayer);
+
+        lastPositions.remove(player.getUniqueId());
     }
 
     /**
