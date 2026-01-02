@@ -41,6 +41,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.util.Map;
@@ -52,6 +53,7 @@ import java.util.function.Consumer;
 public class PlayerMoveListener extends AbstractListener {
 
     private final Map<UUID, Location> lastPositions = new ConcurrentHashMap<>();
+    private BukkitTask moveCheckTask;
 
     public PlayerMoveListener(WorldGuardPlugin plugin) {
         super(plugin);
@@ -70,7 +72,7 @@ public class PlayerMoveListener extends AbstractListener {
     private void startMoveCheckScheduler() {
         long checkInterval = 5L;
 
-        Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
+        moveCheckTask = Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 checkPlayerMovement(player);
             }
@@ -239,5 +241,13 @@ public class PlayerMoveListener extends AbstractListener {
                 event.setCancelled(true);
             }
         }
+    }
+
+    public void shutdown() {
+        if (moveCheckTask != null && !moveCheckTask.isCancelled()) {
+            moveCheckTask.cancel();
+        }
+
+        lastPositions.clear();
     }
 }
