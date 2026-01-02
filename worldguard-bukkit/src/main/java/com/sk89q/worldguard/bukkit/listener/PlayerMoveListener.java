@@ -68,13 +68,13 @@ public class PlayerMoveListener extends AbstractListener {
     }
 
     private void startMoveCheckScheduler() {
-        long CHECK_INTERVAL_TICKS = 5L;
+        long checkInterval = 5L;
 
         Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 checkPlayerMovement(player);
             }
-        }, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+        }, checkInterval, checkInterval);
     }
 
     private boolean isSameBlock(Location loc1, Location loc2) {
