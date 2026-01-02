@@ -263,6 +263,8 @@ public class WorldGuardPlugin extends JavaPlugin {
         } else {
             this.getServer().getScheduler().cancelTasks(this);
         }
+
+        playerMoveListener.shutdown();
     }
 
     @Override
