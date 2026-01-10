@@ -952,7 +952,6 @@ public class EventAbstractionListener extends AbstractListener {
             ItemStack item = event.getItemDrop().getItemStack();
 
             if (player.getInventory().firstEmpty() != -1) {
-                player.sendMessage("1");
                 player.updateInventory();
                 return;
             }
