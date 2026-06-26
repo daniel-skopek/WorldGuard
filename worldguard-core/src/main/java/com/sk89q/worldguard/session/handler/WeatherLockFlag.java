@@ -71,4 +71,12 @@ public class WeatherLockFlag extends FlagValueChangeHandler<WeatherType> {
         return true;
     }
 
+    @Override
+    public void tick(LocalPlayer player, ApplicableRegionSet set) {
+        WeatherType value = set.queryValue(player, Flags.WEATHER_LOCK);
+        if (value != null && !value.equals(player.getPlayerWeather())) {
+            player.setPlayerWeather(value);
+        }
+    }
+
 }

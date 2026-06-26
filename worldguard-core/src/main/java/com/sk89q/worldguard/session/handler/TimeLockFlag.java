@@ -84,4 +84,16 @@ public class TimeLockFlag extends FlagValueChangeHandler<String> {
         return true;
     }
 
+    @Override
+    public void tick(LocalPlayer player, ApplicableRegionSet set) {
+        String value = set.queryValue(player, Flags.TIME_LOCK);
+        if (value != null && timePattern.matcher(value).matches()) {
+            boolean relative = value.startsWith("+") || value.startsWith("-");
+            long time = Long.parseLong(value);
+            if (time != player.getPlayerTimeOffset() || relative != player.isPlayerTimeRelative()) {
+                player.setPlayerTime(time, relative);
+            }
+        }
+    }
+
 }
