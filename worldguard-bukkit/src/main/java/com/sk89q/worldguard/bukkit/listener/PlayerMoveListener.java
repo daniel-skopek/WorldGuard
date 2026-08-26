@@ -26,7 +26,7 @@ import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.bukkit.util.PaperInterop;
 import com.sk89q.worldguard.session.MoveType;
 import com.sk89q.worldguard.session.Session;
-import io.papermc.lib.PaperLib;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.AbstractHorse;
@@ -48,12 +48,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import java.util.function.Consumer;
-
 public class PlayerMoveListener extends AbstractListener {
 
     private final Map<UUID, Location> lastPositions = new ConcurrentHashMap<>();
     private BukkitTask moveCheckTask;
+    private ScheduledTask foliaMoveCheckTask;
 
     public PlayerMoveListener(WorldGuardPlugin plugin) {
         super(plugin);
@@ -72,11 +71,19 @@ public class PlayerMoveListener extends AbstractListener {
     private void startMoveCheckScheduler() {
         long checkInterval = 5L;
 
-        moveCheckTask = Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
-            for (Player player : Bukkit.getOnlinePlayers()) {
-                checkPlayerMovement(player);
-            }
-        }, checkInterval, checkInterval);
+        if (getPlugin().isFolia()) {
+            foliaMoveCheckTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(getPlugin(), scheduledTask -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    player.getScheduler().run(getPlugin(), ignored -> checkPlayerMovement(player), null);
+                }
+            }, checkInterval, checkInterval);
+        } else {
+            moveCheckTask = Bukkit.getScheduler().runTaskTimer(getPlugin(), () -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    checkPlayerMovement(player);
+                }
+            }, checkInterval, checkInterval);
+        }
     }
 
     private boolean isSameBlock(Location loc1, Location loc2) {
@@ -158,8 +165,13 @@ public class PlayerMoveListener extends AbstractListener {
             }
 
             player.teleport(override.clone().add(0, 1, 0));
-            Bukkit.getScheduler().runTaskLater(getPlugin(), () ->
-                    player.teleport(override.clone().add(0, 1, 0)), 1);
+            if (getPlugin().isFolia()) {
+                player.getScheduler().runDelayed(getPlugin(),
+                        scheduledTask -> player.teleport(override.clone().add(0, 1, 0)), null, 1);
+            } else {
+                Bukkit.getScheduler().runTaskLater(getPlugin(), () ->
+                        player.teleport(override.clone().add(0, 1, 0)), 1);
+            }
         } else {
             player.teleport(override);
         }
@@ -244,6 +256,9 @@ public class PlayerMoveListener extends AbstractListener {
     }
 
     public void shutdown() {
+        if (foliaMoveCheckTask != null) {
+            foliaMoveCheckTask.cancel();
+        }
         if (moveCheckTask != null && !moveCheckTask.isCancelled()) {
             moveCheckTask.cancel();
         }

@@ -68,6 +68,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.SulfurCube;
 import org.bukkit.entity.Tameable;
 import org.bukkit.entity.ThrownPotion;
 import org.bukkit.entity.WindCharge;
@@ -100,7 +101,6 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.sk89q.worldguard.bukkit.cause.Cause.create;
@@ -1046,12 +1046,7 @@ public class EventAbstractionListener extends AbstractListener {
                 Runnable task = () -> hopper.getBlock().breakNaturally();
 
                 if (WorldGuardPlugin.inst().isFolia()) {
-                    Bukkit.getRegionScheduler().run(getPlugin(), hopper.getLocation(), new Consumer() {
-                        @Override
-                        public void accept(Object ignored) {
-                            task.run();
-                        }
-                    });
+                    Bukkit.getRegionScheduler().run(getPlugin(), hopper.getLocation(), scheduledTask -> task.run());
                 } else {
                     Bukkit.getScheduler().scheduleSyncDelayedTask(getPlugin(), task);
                 }

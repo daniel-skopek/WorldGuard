@@ -33,8 +33,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
-import java.util.function.Consumer;
-
 
 /**
  * Keeps tracks of sessions and also does session-related handling
@@ -47,7 +45,6 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
      * "last position," "last state," etc. information for all players.
      */
     @Override
-    @SuppressWarnings({"rawtypes", "unchecked"})
     public void resetAllStates() {
         for (Player player : Bukkit.getServer().getOnlinePlayers()) {
             Runnable task = () -> {
@@ -58,12 +55,7 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
                 }
             };
             if (WorldGuardPlugin.inst().isFolia()) {
-                player.getScheduler().run(WorldGuardPlugin.inst(), new Consumer() {
-                    @Override
-                    public void accept(Object ignored) {
-                        task.run();
-                    }
-                }, null);
+                player.getScheduler().run(WorldGuardPlugin.inst(), scheduledTask -> task.run(), null);
             } else {
                 task.run();
             }
@@ -83,7 +75,6 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
     }
 
     @Override
-    @SuppressWarnings({"rawtypes", "unchecked"})
     public void run() {
         for (Player player : Bukkit.getServer().getOnlinePlayers()) {
             Runnable task = () -> {
@@ -91,12 +82,7 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
                 get(localPlayer).tick(localPlayer);
             };
             if (WorldGuardPlugin.inst().isFolia()) {
-                player.getScheduler().run(WorldGuardPlugin.inst(), new Consumer() {
-                    @Override
-                    public void accept(Object ignored) {
-                        task.run();
-                    }
-                }, null);
+                player.getScheduler().run(WorldGuardPlugin.inst(), scheduledTask -> task.run(), null);
             } else {
                 task.run();
             }
