@@ -57,6 +57,15 @@ public class QueryCache {
         checkNotNull(option);
 
         CacheKey key = new CacheKey(location);
+
+        Map<QueryOption, ApplicableRegionSet> cached = cache.get(key);
+        if (cached != null) {
+            ApplicableRegionSet result = cached.get(option);
+            if (result != null) {
+                return result;
+            }
+        }
+
         return cache.compute(key, (k, v) -> option.createCache(manager, location, v)).get(option);
     }
 

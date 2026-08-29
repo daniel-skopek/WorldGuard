@@ -52,6 +52,7 @@ public abstract class RegionContainer {
 
     protected final Object lock = new Object();
     protected final QueryCache cache = new QueryCache();
+    private final RegionQuery query = new RegionQuery(cache);
     protected RegionContainerImpl container;
 
     /**
@@ -140,7 +141,7 @@ public abstract class RegionContainer {
      * @return a new query
      */
     public RegionQuery createQuery() {
-        return new RegionQuery(cache);
+        return query;
     }
 
     /**
