@@ -54,6 +54,8 @@ public class HashMapIndex extends AbstractRegionIndex implements ConcurrentRegio
     private final ConcurrentMap<String, ProtectedRegion> regions = new ConcurrentHashMap<>();
     private Set<ProtectedRegion> removed = new HashSet<>();
     private final Object lock = new Object();
+    @Nullable
+    private volatile ProtectedRegion globalRegion;
 
     /**
      * Called to rebuild the index after changes.
@@ -87,6 +89,10 @@ public class HashMapIndex extends AbstractRegionIndex implements ConcurrentRegio
             }
 
             regions.put(normalId, region);
+
+            if (normalId.equals(ProtectedRegion.GLOBAL_REGION)) {
+                globalRegion = region;
+            }
 
             removed.remove(region);
 
@@ -151,9 +157,14 @@ public class HashMapIndex extends AbstractRegionIndex implements ConcurrentRegio
         Set<ProtectedRegion> removedSet = new HashSet<>();
 
         synchronized (lock) {
-            ProtectedRegion removed = regions.remove(normalize(id));
+            String normalId = normalize(id);
+            ProtectedRegion removed = regions.remove(normalId);
 
             if (removed != null) {
+                if (normalId.equals(ProtectedRegion.GLOBAL_REGION)) {
+                    globalRegion = null;
+                }
+
                 removedSet.add(removed);
 
                 while (true) {
@@ -206,6 +217,14 @@ public class HashMapIndex extends AbstractRegionIndex implements ConcurrentRegio
     @Nullable
     @Override
     public ProtectedRegion get(String id) {
+        if (id.equals(ProtectedRegion.GLOBAL_REGION)) {
+            ProtectedRegion global = globalRegion;
+            if (global == null) {
+                global = regions.get(ProtectedRegion.GLOBAL_REGION);
+                globalRegion = global;
+            }
+            return global;
+        }
         return regions.get(normalize(id));
     }
 

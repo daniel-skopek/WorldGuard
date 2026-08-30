@@ -59,6 +59,7 @@ public class RegionContainerImpl {
     private static final int SAVE_INTERVAL = 1000 * 30;
 
     private final ConcurrentMap<Normal, RegionManager> mapping = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Normal> normalCache = new ConcurrentHashMap<>();
     private final Object lock = new Object();
     private final RegionDriver driver;
     private final Function<String, ? extends ConcurrentRegionIndex> indexFactory = new ChunkHashTable.Factory(new PriorityRTreeIndex.Factory());
@@ -104,7 +105,7 @@ public class RegionContainerImpl {
     public RegionManager load(String name) {
         checkNotNull(name);
 
-        Normal normal = Normal.normal(name);
+        Normal normal = cachedNormal(name);
 
         synchronized (lock) {
             RegionManager manager = mapping.get(normal);
@@ -150,7 +151,7 @@ public class RegionContainerImpl {
     public void unload(String name) {
         checkNotNull(name);
 
-        Normal normal = Normal.normal(name);
+        Normal normal = cachedNormal(name);
 
         synchronized (lock) {
             RegionManager manager = mapping.get(normal);
@@ -208,7 +209,26 @@ public class RegionContainerImpl {
     @Nullable
     public RegionManager get(String name) {
         checkNotNull(name);
-        return mapping.get(Normal.normal(name));
+        return mapping.get(cachedNormal(name));
+    }
+
+    /**
+     * Get a {@link Normal} for the given name, reusing an existing instance
+     * when possible to avoid repeated Unicode normalization.
+     *
+     * @param name the name
+     * @return the normalized name
+     */
+    private Normal cachedNormal(String name) {
+        Normal normal = normalCache.get(name);
+        if (normal == null) {
+            normal = Normal.normal(name);
+            Normal existing = normalCache.putIfAbsent(name, normal);
+            if (existing != null) {
+                normal = existing;
+            }
+        }
+        return normal;
     }
 
     /**

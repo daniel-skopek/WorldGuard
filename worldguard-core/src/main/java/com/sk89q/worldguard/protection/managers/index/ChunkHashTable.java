@@ -58,7 +58,7 @@ public class ChunkHashTable implements ConcurrentRegionIndex {
     private final RegionIndex index;
     private final Object lock = new Object();
     @Nullable
-    private ChunkState lastState;
+    private volatile ChunkState lastState;
 
     /**
      * Create a new instance.
@@ -91,13 +91,26 @@ public class ChunkHashTable implements ConcurrentRegionIndex {
      */
     @Nullable
     private ChunkState get(BlockVector2 position, boolean create) {
+        return get(position.x(), position.z(), create);
+    }
+
+    /**
+     * Get a state object at the given chunk coordinates.
+     *
+     * @param x the chunk x coordinate
+     * @param z the chunk z coordinate
+     * @param create true to create an entry if one does not exist
+     * @return a chunk state object, or {@code null} (only if {@code create} is false)
+     */
+    @Nullable
+    private ChunkState get(int x, int z, boolean create) {
         ChunkState state;
         synchronized (lock) {
-            state = states.get(position.x(), position.z());
+            state = states.get(x, z);
             if (state == null && create) {
-                state = new ChunkState(position);
-                states.put(position.x(), position.z(), state);
-                executor.submit(new EnumerateRegions(position));
+                state = new ChunkState(BlockVector2.at(x, z));
+                states.put(x, z, state);
+                executor.submit(new EnumerateRegions(state.getPosition()));
             }
         }
         return state;
@@ -237,12 +250,15 @@ public class ChunkHashTable implements ConcurrentRegionIndex {
         checkNotNull(position);
         checkNotNull(consumer);
 
-        ChunkState state = lastState;
         int chunkX = position.x() >> 4;
         int chunkZ = position.z() >> 4;
 
+        ChunkState state = lastState;
         if (state == null || state.getPosition().x() != chunkX || state.getPosition().z() != chunkZ) {
-            state = get(BlockVector2.at(chunkX, chunkZ), false);
+            state = get(chunkX, chunkZ, false);
+            if (state != null) {
+                lastState = state;
+            }
         }
 
         if (state != null && state.isLoaded()) {
@@ -336,8 +352,8 @@ public class ChunkHashTable implements ConcurrentRegionIndex {
      */
     private class ChunkState {
         private final BlockVector2 position;
-        private boolean loaded = false;
-        private List<ProtectedRegion> regions = Collections.emptyList();
+        private volatile boolean loaded = false;
+        private volatile List<ProtectedRegion> regions = Collections.emptyList();
 
         private ChunkState(BlockVector2 position) {
             this.position = position;

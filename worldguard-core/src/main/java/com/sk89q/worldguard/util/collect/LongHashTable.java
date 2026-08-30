@@ -36,7 +36,7 @@ public class LongHashTable<V> extends LongBaseHashTable {
     }
 
     @SuppressWarnings("unchecked")
-    public synchronized V get(long key) {
+    public V get(long key) {
         Entry entry = ((Entry) getEntry(key));
         return entry != null ? entry.value : null;
     }
