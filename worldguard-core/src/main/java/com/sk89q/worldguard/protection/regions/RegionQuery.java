@@ -22,6 +22,7 @@ package com.sk89q.worldguard.protection.regions;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
+import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldguard.LocalPlayer;
@@ -514,7 +515,7 @@ public class RegionQuery {
             Map<QueryOption, ApplicableRegionSet> createCache(RegionManager manager, Location location, Map<QueryOption, ApplicableRegionSet> cache) {
                 if (cache == null) {
                     cache = new EnumMap<>(QueryOption.class);
-                    cache.put(QueryOption.NONE, manager.getApplicableRegions(location.toVector().toBlockPoint(), QueryOption.NONE));
+                    cache.put(QueryOption.NONE, manager.getApplicableRegions(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()), QueryOption.NONE));
                 }
 
                 // If c != null, we can assume that Option.NONE is present.
@@ -531,7 +532,7 @@ public class RegionQuery {
             Map<QueryOption, ApplicableRegionSet> createCache(RegionManager manager, Location location, Map<QueryOption, ApplicableRegionSet> cache) {
                 if (cache == null) {
                     Map<QueryOption, ApplicableRegionSet> newCache = new EnumMap<>(QueryOption.class);
-                    ApplicableRegionSet result = manager.getApplicableRegions(location.toVector().toBlockPoint(), QueryOption.SORT);
+                    ApplicableRegionSet result = manager.getApplicableRegions(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()), QueryOption.SORT);
                     newCache.put(QueryOption.NONE, result);
                     newCache.put(QueryOption.SORT, result);
                     return newCache;
@@ -552,7 +553,7 @@ public class RegionQuery {
             Map<QueryOption, ApplicableRegionSet> createCache(RegionManager manager, Location location, Map<QueryOption, ApplicableRegionSet> cache) {
                 if (cache == null) {
                     Map<QueryOption, ApplicableRegionSet> newCache = new EnumMap<>(QueryOption.class);
-                    ApplicableRegionSet noParResult = manager.getApplicableRegions(location.toVector().toBlockPoint(), QueryOption.NONE);
+                    ApplicableRegionSet noParResult = manager.getApplicableRegions(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()), QueryOption.NONE);
                     Set<ProtectedRegion> noParRegions = noParResult.getRegions();
                     Set<ProtectedRegion> regions = new HashSet<>();
                     noParRegions.forEach(new RegionCollectionConsumer(regions, true)::apply);

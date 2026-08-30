@@ -42,6 +42,8 @@ public class QueryCache {
 
     private final ConcurrentMap<CacheKey, Map<QueryOption, ApplicableRegionSet>> cache = new ConcurrentHashMap<>(16, 0.75f, 2);
 
+    private final ThreadLocal<CacheKey> localKey = ThreadLocal.withInitial(CacheKey::new);
+
     /**
      * Get from the cache a {@code ApplicableRegionSet} if an entry exists;
      * otherwise, query the given manager for a result and cache it.
@@ -56,7 +58,8 @@ public class QueryCache {
         checkNotNull(location);
         checkNotNull(option);
 
-        CacheKey key = new CacheKey(location);
+        CacheKey key = localKey.get();
+        key.set(location);
 
         Map<QueryOption, ApplicableRegionSet> cached = cache.get(key);
         if (cached != null) {
@@ -64,9 +67,26 @@ public class QueryCache {
             if (result != null) {
                 return result;
             }
+            // The location is cached, but this option has not been cached yet
+            // (for example, the entry was created by a query that used a
+            // different QueryOption). Merge the missing option under the bin lock.
+            return cache.compute(new CacheKey(location), (k, v) -> option.createCache(manager, location, v)).get(option);
         }
 
-        return cache.compute(key, (k, v) -> option.createCache(manager, location, v)).get(option);
+        // No entry exists yet. Build a fully-populated map and install it. The
+        // map is only published once it is complete, so readers never observe a
+        // partially-populated map from this thread.
+        Map<QueryOption, ApplicableRegionSet> created = option.createCache(manager, location, null);
+        Map<QueryOption, ApplicableRegionSet> installed = cache.putIfAbsent(new CacheKey(location), created);
+        Map<QueryOption, ApplicableRegionSet> winner = installed != null ? installed : created;
+
+        ApplicableRegionSet result = winner.get(option);
+        if (result != null) {
+            return result;
+        }
+
+        // A concurrent query installed an entry for a different option before us.
+        return cache.compute(new CacheKey(location), (k, v) -> option.createCache(manager, location, v)).get(option);
     }
 
     /**
@@ -80,13 +100,20 @@ public class QueryCache {
      * Key object for the map.
      */
     private static class CacheKey {
-        private final World world;
-        private final int x;
-        private final int y;
-        private final int z;
-        private final int hashCode;
+        private World world;
+        private int x;
+        private int y;
+        private int z;
+        private int hashCode;
+
+        private CacheKey() {
+        }
 
         private CacheKey(Location location) {
+            set(location);
+        }
+
+        private void set(Location location) {
             this.world = (World) location.getExtent();
             this.x = location.getBlockX();
             this.y = location.getBlockY();

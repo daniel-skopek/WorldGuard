@@ -61,29 +61,28 @@ public class LongBaseHashTable extends LongHash {
     }
 
     public synchronized EntryBase getEntry(long key) {
-        return containsKey(key) ? cache : null;
-    }
-
-    public synchronized boolean containsKey(long key) {
-        if (this.cache != null && cache.key == key) return true;
+        if (this.cache != null && cache.key == key) return cache;
 
         int outerIdx = (int) ((key >> 32) & 255);
         EntryBase[][] outer = this.values[(int) (key & 255)];
-        if (outer == null) return false;
+        if (outer == null) return null;
 
         EntryBase[] inner = outer[outerIdx];
-        if (inner == null) return false;
+        if (inner == null) return null;
 
-        for (int i = 0; i < inner.length; i++) {
-            EntryBase e = inner[i];
+        for (EntryBase e : inner) {
             if (e == null) {
-                return false;
+                return null;
             } else if (e.key == key) {
                 this.cache = e;
-                return true;
+                return e;
             }
         }
-        return false;
+        return null;
+    }
+
+    public boolean containsKey(long key) {
+        return getEntry(key) != null;
     }
 
     public synchronized void remove(long key) {
