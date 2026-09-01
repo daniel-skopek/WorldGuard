@@ -27,6 +27,7 @@ import com.sk89q.worldguard.bukkit.internal.WGMetadata;
 import com.sk89q.worldguard.bukkit.util.Entities;
 import io.papermc.lib.PaperLib;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.bukkit.entity.AnimalTamer;
@@ -342,8 +343,11 @@ public final class Cause {
                     indirect = true;
                     addAll(((LightningStrike) o).getCausingEntity());
                 } else if (o instanceof FallingBlock f && PaperLib.isPaper() && f.getOrigin() != null) {
-                    indirect = true;
-                    addAll(f.getOrigin().getBlock());
+                    Location origin = f.getOrigin();
+                    if (origin.getWorld() != null) {
+                        indirect = true;
+                        addAll(origin.getBlock());
+                    }
                 }
 
                 // Add manually tracked parent causes
